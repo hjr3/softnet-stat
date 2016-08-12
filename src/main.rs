@@ -17,6 +17,8 @@
 
 #[macro_use]
 extern crate nom;
+extern crate getopts;
+extern crate rustc_serialize;
 
 use nom::{IResult, space, hex_u32, line_ending};
 
@@ -24,8 +26,13 @@ use std::io;
 use std::io::prelude::*;
 use std::fs::File;
 
+use getopts::Options;
+use std::env;
+
+use rustc_serialize::json;
+
 /// Network data processing statistics
-#[derive(Debug)]
+#[derive(Debug, RustcDecodable, RustcEncodable)]
 struct SoftnetStat {
     /// The number of network frames processed.
     ///
@@ -113,6 +120,23 @@ named!(parse_softnet_line(&[u8]) -> SoftnetStat,
 );
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    let program = args[0].clone();
+
+    let mut opts = Options::new();
+    opts.optflag("j", "json", "use json output");
+    opts.optflag("h", "help", "print this help menu");
+
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(e) => panic!("Failed to parse options - {}", e),
+    };
+
+    if matches.opt_present("h") {
+        print_usage(&program, opts);
+        return;
+    }
+
     let file = "/proc/net/softnet_stat";
 
     let raw = match read_proc_file(file) {
@@ -126,7 +150,17 @@ fn main() {
         IResult::Incomplete(_) => panic!("{} is in an unsupported format", file),
     };
 
-    print(&stats, 15);
+    if matches.opt_present("j") {
+        json(&stats);
+    } else {
+        print(&stats, 15);
+    }
+
+}
+
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!("Usage: {} [options]", program);
+    print!("{}", opts.usage(&brief));
 }
 
 fn read_proc_file(file: &str) -> io::Result<Vec<u8>> {
@@ -161,6 +195,12 @@ fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
                  spacer = spacer);
     }
 }
+
+fn json(stats: &Vec<SoftnetStat>) {
+    let data = json::encode(&stats).expect("Failed to encode stats into json format");
+    println!("{}", data);
+}
+
 
 #[test]
 fn test_parser() {

@@ -10,14 +10,15 @@ This parser should work on all Linux kernels since v2.6.32. In later versions of
 
 This software was written in Rust using v1.10.0. All dependencies are listed in `Cargo.toml`. To build: `$ cargo build`.
 
-
 ## Tests
 
 This program has been tested against 3 versions of the `/proc/net/softnet_stat` file. To excercise these tests: `$ cargo test`.
 
-## Example
+## Examples
 
-```rust
+### Formatted
+
+```shell
 ./softnet-stat
 
 Cpu            Processed      Dropped        Time Squeezed  Cpu Collision  Received RPS   Flow Limit Count
@@ -27,4 +28,11 @@ Cpu            Processed      Dropped        Time Squeezed  Cpu Collision  Recei
 3              1640600369     0              0              0              0              0
 4              1737798067     0              5              0              0              0
 5              1686686610     0              1              0              0              0
+```
+
+### Json
+
+```shell
+./softnet-stat --json
+[{"processed":1842008611,"dropped":0,"time_squeeze":1,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1863193957,"dropped":0,"time_squeeze":2,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1711764716,"dropped":0,"time_squeeze":3,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1640600369,"dropped":0,"time_squeeze":0,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1737798067,"dropped":0,"time_squeeze":5,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1686686610,"dropped":0,"time_squeeze":1,"cpu_collision":0,"received_rps":null,"flow_limit_count":null}]
 ```
