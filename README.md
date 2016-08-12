@@ -14,3 +14,17 @@ This software was written in Rust using v1.10.0. All dependencies are listed in 
 ## Tests
 
 This program has been tested against 3 versions of the `/proc/net/softnet_stat` file. To excercise these tests: `$ cargo test`.
+
+## Example
+
+```rust
+./softnet-stat
+
+Cpu            Processed      Dropped        Time Squeezed  Cpu Collision  Received RPS   Flow Limit Count
+0              1842008611     0              1              0              0              0
+1              1863193957     0              2              0              0              0
+2              1711764716     0              3              0              0              0
+3              1640600369     0              0              0              0              0
+4              1737798067     0              5              0              0              0
+5              1686686610     0              1              0              0              0
+```
