@@ -1,0 +1,7 @@
+[package]
+name = "softnet-stat"
+version = "0.1.0"
+authors = ["Herman J. Radtke III <herman@hermanradtke.com>"]
+
+[dependencies]
+nom = "1.2.4"

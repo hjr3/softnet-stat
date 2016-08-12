@@ -1,0 +1,181 @@
+/*  Parser for /proc/softnet_stats file
+ *  Copyright (C) 2016  Herman J. Radtke III <herman@hermanradtke.com>
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#[macro_use]
+extern crate nom;
+
+use nom::{IResult, space, hex_u32, line_ending};
+
+use std::io;
+use std::io::prelude::*;
+use std::fs::File;
+
+/// Network data processing statistics
+#[derive(Debug)]
+struct SoftnetStat {
+    /// The number of network frames processed.
+    ///
+    /// This can be more than the total number of network frames received if
+    /// you are using ethernet bonding. There are cases where the ethernet
+    /// bonding driver will trigger network data to be re-processed, which
+    /// would increment the processed count more than once for the same packet.
+    pub processed: u32,
+
+    /// The number of network frames dropped because there was no room on the processing queue.
+    pub dropped: u32,
+
+    /// The number of times the `net_rx_action` loop terminated because the budget was consumed or
+    /// the time limit was reached, but more work could have been.
+    pub time_squeeze: u32,
+
+    /// The number of times a collision occurred when trying to obtain a device lock
+    /// when transmitting packets.
+    pub cpu_collision: u32,
+
+    /// The number of times this CPU has been woken up to process packets via an Inter-processor Interrupt.
+    ///
+    /// Support was added in kernel v2.6.36
+    pub received_rps: Option<u32>,
+
+    /// The number of times the flow limit has been reached.
+    ///
+    /// Flow limiting is an optional Receive Packet Steering feature.
+    /// Support was added in kernel v3.11
+    pub flow_limit_count: Option<u32>,
+}
+
+named!(parse_softnet_stats(&[u8]) -> Vec<SoftnetStat>,
+    many1!(
+        parse_softnet_line
+    )
+);
+
+named!(parse_softnet_line(&[u8]) -> SoftnetStat,
+    chain!(
+        processed: hex_u32 ~
+        space ~
+        dropped: hex_u32 ~
+        space ~
+        time_squeeze: hex_u32 ~
+        space ~
+        hex_u32 ~
+        space ~
+        hex_u32 ~
+        space ~
+        hex_u32 ~
+        space ~
+        hex_u32 ~
+        space ~
+        hex_u32 ~
+        space ~
+        cpu_collision: hex_u32 ~
+        received_rps: opt!(
+            chain!(
+                space? ~
+                v: hex_u32 ,
+
+                || v
+            )
+        ) ~
+        flow_limit_count: opt!(
+            chain!(
+                space? ~
+                v: hex_u32 ,
+
+                || v
+            )
+        ) ~
+        line_ending ,
+
+        || SoftnetStat {
+            processed: processed,
+            dropped: dropped,
+            time_squeeze: time_squeeze,
+            cpu_collision: cpu_collision,
+            received_rps: received_rps,
+            flow_limit_count: flow_limit_count,
+        }
+    )
+);
+
+fn main() {
+    let file = "/proc/net/softnet_stat";
+
+    let raw = match read_proc_file(file) {
+        Ok(file) => file,
+        Err(e) => panic!("Failed to open {} - {}", file, e),
+    };
+
+    let stats = match parse_softnet_stats(&raw) {
+        IResult::Done(_, o) => o,
+        IResult::Error(_) => panic!("Error while parsing {}", file),
+        IResult::Incomplete(_) => panic!("{} is in an unsupported format", file),
+    };
+
+    print(&stats, 15);
+}
+
+fn read_proc_file(file: &str) -> io::Result<Vec<u8>> {
+    let mut f = try!(File::open(file));
+
+    let mut buf = vec![];
+    try!(f.read_to_end(&mut buf));
+
+    Ok(buf)
+}
+
+fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
+    println!("{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
+             "Cpu",
+             "Processed",
+             "Dropped",
+             "Time Squeezed",
+             "Cpu Collision",
+             "Received RPS",
+             "Flow Limit Count",
+             spacer = spacer);
+
+    for (i, stat) in stats.iter().enumerate() {
+        println!("{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
+                 i,
+                 stat.processed,
+                 stat.dropped,
+                 stat.time_squeeze,
+                 stat.cpu_collision,
+                 stat.received_rps.unwrap_or_default(),
+                 stat.flow_limit_count.unwrap_or_default(),
+                 spacer = spacer);
+    }
+}
+
+#[test]
+fn test_parser() {
+    let files = vec![
+        "/Users/herman/projects/softnet-stat/tests/proc-net-softnet_stat-2_6_32",
+        "/Users/herman/projects/softnet-stat/tests/proc-net-softnet_stat-2_6_36",
+        "/Users/herman/projects/softnet-stat/tests/proc-net-softnet_stat-3_11",
+    ];
+
+    for file in files {
+        let raw = read_proc_file(file).unwrap();
+
+        match parse_softnet_stats(&raw) {
+            IResult::Done(_, _) => {},
+            _ => panic!("Test failed"),
+        }
+    }
+}
