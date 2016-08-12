@@ -10,6 +10,22 @@ This parser should work on all Linux kernels since v2.6.32. In later versions of
 
 This software was written in Rust using v1.10.0. All dependencies are listed in `Cargo.toml`. To build: `$ cargo build`.
 
+### Static Binary
+
+To build a completely static binary for production use, the binary can use musl as a target.
+
+For Linux:
+
+```shell
+$ cargo build --target=x86_64-unknown-linux-musl
+```
+
+For macOS:
+
+```shell
+docker run --rm -it -v "$(pwd)":/home/rust/src ekidd/rust-musl-builder cargo build --release
+```
+
 ## Tests
 
 This program has been tested against 3 versions of the `/proc/net/softnet_stat` file. To excercise these tests: `$ cargo test`.
