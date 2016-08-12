@@ -1,6 +1,6 @@
 [package]
 name = "softnet-stat"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Herman J. Radtke III <herman@hermanradtke.com>"]
 description = "Parse the `/proc/net/softnet_stat` file into something more readable."
 documentation = "https://github.com/hjr3/softnet-stat"
