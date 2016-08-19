@@ -204,14 +204,15 @@ fn json(stats: &Vec<SoftnetStat>) {
 
 #[test]
 fn test_parser() {
+    let pwd = env!("CARGO_MANIFEST_DIR");
     let files = vec![
-        "/Users/herman/projects/softnet-stat/tests/proc-net-softnet_stat-2_6_32",
-        "/Users/herman/projects/softnet-stat/tests/proc-net-softnet_stat-2_6_36",
-        "/Users/herman/projects/softnet-stat/tests/proc-net-softnet_stat-3_11",
+        format!("{}/tests/proc-net-softnet_stat-2_6_32", pwd),
+        format!("{}/tests/proc-net-softnet_stat-2_6_36", pwd),
+        format!("{}/tests/proc-net-softnet_stat-3_11", pwd),
     ];
 
     for file in files {
-        let raw = read_proc_file(file).unwrap();
+        let raw = read_proc_file(&file).unwrap();
 
         match parse_softnet_stats(&raw) {
             IResult::Done(_, _) => {},
