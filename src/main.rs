@@ -23,7 +23,6 @@ extern crate rustc_serialize;
 use nom::{IResult, space, hex_u32, line_ending};
 
 use std::io;
-use std::io::prelude::*;
 use std::fs::File;
 
 use getopts::Options;
@@ -126,6 +125,7 @@ fn main() {
     let mut opts = Options::new();
     opts.optflag("j", "json", "use json output");
     opts.optflag("h", "help", "print this help menu");
+    opts.optflag("s", "stdin", "read from stdin");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -139,9 +139,12 @@ fn main() {
 
     let file = "/proc/net/softnet_stat";
 
-    let raw = match read_proc_file(file) {
-        Ok(file) => file,
-        Err(e) => panic!("Failed to open {} - {}", file, e),
+    let raw = if matches.opt_present("s") {
+        let handle = io::stdin();
+        read_proc_file(handle).expect("Failed to read proc from stdin")
+    } else {
+        let handle = File::open(file).expect("Failed to open file");
+        read_proc_file(handle).expect("Failed to read proc from file")
     };
 
     let stats = match parse_softnet_stats(&raw) {
@@ -163,11 +166,9 @@ fn print_usage(program: &str, opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
-fn read_proc_file(file: &str) -> io::Result<Vec<u8>> {
-    let mut f = try!(File::open(file));
-
+fn read_proc_file<R>(mut handle: R) -> io::Result<Vec<u8>> where R: io::Read {
     let mut buf = vec![];
-    try!(f.read_to_end(&mut buf));
+    try!(handle.read_to_end(&mut buf));
 
     Ok(buf)
 }
@@ -212,7 +213,8 @@ fn test_parser() {
     ];
 
     for file in files {
-        let raw = read_proc_file(&file).unwrap();
+        let handle = File::open(file).unwrap();
+        let raw = read_proc_file(handle).unwrap();
 
         match parse_softnet_stats(&raw) {
             IResult::Done(_, _) => {},
