@@ -56,3 +56,16 @@ Cpu            Processed      Dropped        Time Squeezed  Cpu Collision  Recei
 ./softnet-stat --json
 [{"processed":1842008611,"dropped":0,"time_squeeze":1,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1863193957,"dropped":0,"time_squeeze":2,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1711764716,"dropped":0,"time_squeeze":3,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1640600369,"dropped":0,"time_squeeze":0,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1737798067,"dropped":0,"time_squeeze":5,"cpu_collision":0,"received_rps":null,"flow_limit_count":null},{"processed":1686686610,"dropped":0,"time_squeeze":1,"cpu_collision":0,"received_rps":null,"flow_limit_count":null}]
 ```
+
+### Read From Stdin
+
+```
+$ cat /path/to/file | ./target/debug/softnet-stat -s
+Cpu            Processed      Dropped        Time Squeezed  Cpu Collision  Received RPS   Flow Limit Count
+0              1842008611     0              1              0              0              0
+1              1863193957     0              2              0              0              0
+2              1711764716     0              3              0              0              0
+3              1640600369     0              0              0              0              0
+4              1737798067     0              5              0              0              0
+5              1686686610     0              1              0              0              0
+```
