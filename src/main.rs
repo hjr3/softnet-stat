@@ -124,6 +124,7 @@ fn main() {
 
     let mut opts = Options::new();
     opts.optflag("j", "json", "use json output");
+    opts.optflag("p", "prometheus", "use prometheus output");
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("s", "stdin", "read from stdin");
 
@@ -155,6 +156,8 @@ fn main() {
 
     if matches.opt_present("j") {
         json(&stats);
+    } else if matches.opt_present("p") {
+        prometheus(&stats);
     } else {
         print(&stats, 15);
     }
@@ -200,6 +203,18 @@ fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
 fn json(stats: &Vec<SoftnetStat>) {
     let data = json::encode(&stats).expect("Failed to encode stats into json format");
     println!("{}", data);
+}
+
+fn prometheus(stats: &Vec<SoftnetStat>) {
+    for (i, stat) in stats.iter().enumerate() {
+        println!("softnet_frames_processed{{cpu=\"cpu{}\"}} {}", i, stat.processed);
+        println!("softnet_frames_dropped{{cpu=\"cpu{}\"}} {}", i, stat.dropped);
+        println!("softnet_time_squeeze{{cpu=\"cpu{}\"}} {}", i, stat.time_squeeze);
+        println!("softnet_cpu_collisions{{cpu=\"cpu{}\"}} {}", i, stat.cpu_collision);
+        println!("softnet_received_rps{{cpu=\"cpu{}\"}} {}", i, stat.received_rps.unwrap_or_default());
+        println!("softnet_flow_limit_count{{cpu=\"cpu{}\"}} {}", i, stat.flow_limit_count.unwrap_or_default());
+
+    }
 }
 
 
