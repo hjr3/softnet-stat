@@ -18,7 +18,10 @@
 #[macro_use]
 extern crate nom;
 extern crate getopts;
-extern crate rustc_serialize;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
+extern crate serde_json;
 
 use nom::{IResult, space, hex_u32, line_ending};
 
@@ -28,10 +31,8 @@ use std::fs::File;
 use getopts::Options;
 use std::env;
 
-use rustc_serialize::json;
-
 /// Network data processing statistics
-#[derive(Debug, RustcDecodable, RustcEncodable)]
+#[derive(Debug, Serialize, Deserialize)]
 struct SoftnetStat {
     /// The number of network frames processed.
     ///
@@ -201,7 +202,7 @@ fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
 }
 
 fn json(stats: &Vec<SoftnetStat>) {
-    let data = json::encode(&stats).expect("Failed to encode stats into json format");
+    let data = serde_json::to_string(&stats).expect("Failed to encode stats into json format");
     println!("{}", data);
 }
 
@@ -216,7 +217,6 @@ fn prometheus(stats: &Vec<SoftnetStat>) {
 
     }
 }
-
 
 #[test]
 fn test_parser() {
