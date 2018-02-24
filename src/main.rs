@@ -18,9 +18,12 @@
 #[macro_use]
 extern crate nom;
 extern crate getopts;
-extern crate rustc_serialize;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
+extern crate serde_json;
 
-use nom::{IResult, space, hex_u32, line_ending};
+use nom::{IResult, Err, AsBytes, Context, ErrorKind, space, hex_u32, line_ending};
 
 use std::io;
 use std::fs::File;
@@ -28,10 +31,8 @@ use std::fs::File;
 use getopts::Options;
 use std::env;
 
-use rustc_serialize::json;
-
 /// Network data processing statistics
-#[derive(Debug, RustcDecodable, RustcEncodable)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct SoftnetStat {
     /// The number of network frames processed.
     ///
@@ -64,59 +65,65 @@ struct SoftnetStat {
     pub flow_limit_count: Option<u32>,
 }
 
-named!(parse_softnet_stats(&[u8]) -> Vec<SoftnetStat>,
-    many1!(
-        parse_softnet_line
-    )
-);
+fn parse_softnet_stats(input: &[u8]) -> IResult<&[u8], Vec<SoftnetStat>> {
+    many1!(input, parse_softnet_line)
+}
 
-named!(parse_softnet_line(&[u8]) -> SoftnetStat,
-    chain!(
-        processed: hex_u32 ~
-        space ~
-        dropped: hex_u32 ~
-        space ~
-        time_squeeze: hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        cpu_collision: hex_u32 ~
+fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
+
+    // do_parse! returns Err::Incomplete on zero length input, which causes problems with other
+    // sequence combinators. Return an end of file error instead.
+    if input.as_bytes().len() == 0 {
+        return Err(Err::Error(Context::Code(input, ErrorKind::Eof)));
+    }
+
+    do_parse!(
+        input,
+        processed: hex_u32 >>
+        space >>
+        dropped: hex_u32 >>
+        space >>
+        time_squeeze: hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        cpu_collision: hex_u32 >>
         received_rps: opt!(
-            chain!(
-                space? ~
-                v: hex_u32 ,
+            do_parse!(
+                opt!(space) >>
+                v: hex_u32 >>
 
-                || v
+                (v)
             )
-        ) ~
+        ) >>
         flow_limit_count: opt!(
-            chain!(
-                space? ~
-                v: hex_u32 ,
+            do_parse!(
+                opt!(space) >>
+                v: hex_u32 >>
 
-                || v
+                (v)
             )
-        ) ~
-        line_ending ,
+        ) >>
+        line_ending >>
 
-        || SoftnetStat {
+        (SoftnetStat {
             processed: processed,
             dropped: dropped,
             time_squeeze: time_squeeze,
             cpu_collision: cpu_collision,
             received_rps: received_rps,
             flow_limit_count: flow_limit_count,
-        }
+        })
     )
-);
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -149,9 +156,9 @@ fn main() {
     };
 
     let stats = match parse_softnet_stats(&raw) {
-        IResult::Done(_, o) => o,
-        IResult::Error(_) => panic!("Error while parsing {}", file),
-        IResult::Incomplete(_) => panic!("{} is in an unsupported format", file),
+        Ok((_, value)) => value,
+        Err(Err::Incomplete(needed)) => panic!("{} is in an unsupported format. Needed: {:?}", file, needed),
+        Err(Err::Error(e)) | Err(Err::Failure(e)) => panic!("Error while parsing {}: {:?}", file, e),
     };
 
     if matches.opt_present("j") {
@@ -161,7 +168,6 @@ fn main() {
     } else {
         print(&stats, 15);
     }
-
 }
 
 fn print_usage(program: &str, opts: Options) {
@@ -201,7 +207,7 @@ fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
 }
 
 fn json(stats: &Vec<SoftnetStat>) {
-    let data = json::encode(&stats).expect("Failed to encode stats into json format");
+    let data = serde_json::to_string(&stats).expect("Failed to encode stats into json format");
     println!("{}", data);
 }
 
@@ -213,13 +219,28 @@ fn prometheus(stats: &Vec<SoftnetStat>) {
         println!("softnet_cpu_collisions{{cpu=\"cpu{}\"}} {}", i, stat.cpu_collision);
         println!("softnet_received_rps{{cpu=\"cpu{}\"}} {}", i, stat.received_rps.unwrap_or_default());
         println!("softnet_flow_limit_count{{cpu=\"cpu{}\"}} {}", i, stat.flow_limit_count.unwrap_or_default());
-
     }
 }
 
+#[test]
+fn test_parse_softnet_line() {
+    let raw = b"6dcad223 00000000 00000001 00000000 00000000 00000000 00000000 00000000 00000000\n";
+
+    let (remaining, value) = parse_softnet_line(&raw[..]).unwrap();
+
+    assert_eq!(0, remaining.as_bytes().len());
+    assert_eq!(SoftnetStat {
+        processed: 1842008611,
+        dropped: 0,
+        time_squeeze: 1,
+        cpu_collision: 0,
+        received_rps: None,
+        flow_limit_count: None,
+    }, value);
+}
 
 #[test]
-fn test_parser() {
+fn test_parse_softnet_stats() {
     let pwd = env!("CARGO_MANIFEST_DIR");
     let files = vec![
         format!("{}/tests/proc-net-softnet_stat-2_6_32", pwd),
@@ -227,13 +248,10 @@ fn test_parser() {
         format!("{}/tests/proc-net-softnet_stat-3_11", pwd),
     ];
 
-    for file in files {
+    for file in files.iter() {
         let handle = File::open(file).unwrap();
         let raw = read_proc_file(handle).unwrap();
 
-        match parse_softnet_stats(&raw) {
-            IResult::Done(_, _) => {},
-            _ => panic!("Test failed"),
-        }
+        let _ = parse_softnet_stats(&raw).unwrap();
     }
 }
