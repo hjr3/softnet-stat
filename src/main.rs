@@ -23,7 +23,8 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
-use nom::{IResult, space, hex_u32, line_ending};
+use nom::{IResult, Err, Context, space, hex_u32, line_ending};
+use nom::types::CompleteByteSlice;
 
 use std::io;
 use std::fs::File;
@@ -32,7 +33,7 @@ use getopts::Options;
 use std::env;
 
 /// Network data processing statistics
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct SoftnetStat {
     /// The number of network frames processed.
     ///
@@ -65,59 +66,70 @@ struct SoftnetStat {
     pub flow_limit_count: Option<u32>,
 }
 
-named!(parse_softnet_stats(&[u8]) -> Vec<SoftnetStat>,
-    many1!(
-        parse_softnet_line
-    )
-);
+//named!(parse_softnet_stats<CompleteByteSlice, Vec<SoftnetStat>>,
+fn parse_softnet_stats(input: CompleteByteSlice) -> IResult<CompleteByteSlice, Vec<SoftnetStat>> {
+    many1!(input, parse_softnet_line)
+}
 
-named!(parse_softnet_line(&[u8]) -> SoftnetStat,
-    chain!(
-        processed: hex_u32 ~
-        space ~
-        dropped: hex_u32 ~
-        space ~
-        time_squeeze: hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        hex_u32 ~
-        space ~
-        cpu_collision: hex_u32 ~
+//named!(parse_softnet_line<CompleteByteSlice, SoftnetStat>,
+fn parse_softnet_line(input: CompleteByteSlice) -> IResult<CompleteByteSlice, SoftnetStat> {
+    let i = input.0.clone();
+    match do_parse!(
+        i,
+        processed: hex_u32 >>
+        space >>
+        dropped: hex_u32 >>
+        space >>
+        time_squeeze: hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        hex_u32 >>
+        space >>
+        cpu_collision: hex_u32 >>
         received_rps: opt!(
-            chain!(
-                space? ~
-                v: hex_u32 ,
+            do_parse!(
+                opt!(space) >>
+                v: hex_u32 >>
 
-                || v
+                (v)
             )
-        ) ~
+        ) >>
         flow_limit_count: opt!(
-            chain!(
-                space? ~
-                v: hex_u32 ,
+            do_parse!(
+                opt!(space) >>
+                v: hex_u32 >>
 
-                || v
+                (v)
             )
-        ) ~
-        line_ending ,
+        ) >>
+        line_ending >>
 
-        || SoftnetStat {
+        (SoftnetStat {
             processed: processed,
             dropped: dropped,
             time_squeeze: time_squeeze,
             cpu_collision: cpu_collision,
             received_rps: received_rps,
             flow_limit_count: flow_limit_count,
+        })
+    ) {
+        Ok((remaining, value)) => Ok((CompleteByteSlice(remaining), value)),
+        Err(Err::Incomplete(needed)) => Err(Err::Incomplete(needed)),
+        Err(Err::Error(Context::Code(input, code))) => {
+            Err(Err::Error(Context::Code(CompleteByteSlice(input), code)))
         }
-    )
-);
+        Err(Err::Failure(Context::Code(input, code))) => {
+            Err(Err::Failure(Context::Code(CompleteByteSlice(input), code)))
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -149,10 +161,10 @@ fn main() {
         read_proc_file(handle).expect("Failed to read proc from file")
     };
 
-    let stats = match parse_softnet_stats(&raw) {
-        IResult::Done(_, o) => o,
-        IResult::Error(_) => panic!("Error while parsing {}", file),
-        IResult::Incomplete(_) => panic!("{} is in an unsupported format", file),
+    let stats = match parse_softnet_stats(CompleteByteSlice(&raw)) {
+        Ok((_, value)) => value,
+        Err(Err::Incomplete(needed)) => panic!("{} is in an unsupported format. Needed: {:?}", file, needed),
+        Err(Err::Error(e)) | Err(Err::Failure(e)) => panic!("Error while parsing {}: {:?}", file, e),
     };
 
     if matches.opt_present("j") {
@@ -219,21 +231,49 @@ fn prometheus(stats: &Vec<SoftnetStat>) {
 }
 
 #[test]
-fn test_parser() {
+fn test_parse_softnet_line() {
+    use nom::AsBytes;
+
+    let pwd = env!("CARGO_MANIFEST_DIR");
+    let file = format!("{}/tests/wtf", pwd);
+    let handle = File::open(file).unwrap();
+    let raw = read_proc_file(handle).unwrap();
+
+    match parse_softnet_line(CompleteByteSlice(&raw)) {
+        Ok((remaining, value)) => {
+            assert_eq!(0, remaining.as_bytes().len());
+            assert_eq!(SoftnetStat {
+                processed: 1842008611,
+                dropped: 0,
+                time_squeeze: 1,
+                cpu_collision: 0,
+                received_rps: None,
+                flow_limit_count: None,
+            }, value);
+        },
+        Err(Err::Incomplete(needed)) => panic!("Unsupported format. Needed: {:?}", needed),
+        Err(Err::Error(e)) | Err(Err::Failure(e)) => panic!("Error while parsing: {:?}", e),
+    }
+}
+
+#[test]
+fn test_parse_softnet_stats() {
     let pwd = env!("CARGO_MANIFEST_DIR");
     let files = vec![
-        format!("{}/tests/proc-net-softnet_stat-2_6_32", pwd),
-        format!("{}/tests/proc-net-softnet_stat-2_6_36", pwd),
-        format!("{}/tests/proc-net-softnet_stat-3_11", pwd),
+        format!("{}/tests/wtf", pwd),
+        //format!("{}/tests/proc-net-softnet_stat-2_6_32", pwd),
+        //format!("{}/tests/proc-net-softnet_stat-2_6_36", pwd),
+        //format!("{}/tests/proc-net-softnet_stat-3_11", pwd),
     ];
 
-    for file in files {
+    for file in files.iter() {
         let handle = File::open(file).unwrap();
         let raw = read_proc_file(handle).unwrap();
 
-        match parse_softnet_stats(&raw) {
-            IResult::Done(_, _) => {},
-            _ => panic!("Test failed"),
+        match parse_softnet_stats(CompleteByteSlice(&raw)) {
+            Ok((_, _)) => {},
+            Err(Err::Incomplete(needed)) => panic!("{} is in an unsupported format. Needed: {:?}", file, needed),
+            Err(Err::Error(e)) | Err(Err::Failure(e)) => panic!("Error while parsing {}: {:?}", file, e),
         }
     }
 }
