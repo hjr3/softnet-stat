@@ -15,21 +15,16 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#[macro_use]
-extern crate nom;
-extern crate getopts;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde;
-extern crate serde_json;
-
-use nom::{hex_u32, line_ending, space, AsBytes, Context, Err, ErrorKind, IResult};
-
+use std::env;
 use std::fs::File;
 use std::io;
 
 use getopts::Options;
-use std::env;
+use nom::{
+    call, do_parse, error_position, hex_u32, line_ending, many1, opt, space, AsBytes, Context, Err,
+    ErrorKind, IResult,
+};
+use serde_derive::{Deserialize, Serialize};
 
 /// Network data processing statistics
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
