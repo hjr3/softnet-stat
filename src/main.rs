@@ -15,21 +15,15 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#[macro_use]
-extern crate nom;
-extern crate getopts;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde;
-extern crate serde_json;
-
-use nom::{hex_u32, line_ending, space, AsBytes, Context, Err, ErrorKind, IResult};
-
+use std::env;
 use std::fs::File;
 use std::io;
 
 use getopts::Options;
-use std::env;
+use nom::{
+    do_parse, hex_u32, line_ending, many1, opt, space, AsBytes, Context, Err, ErrorKind, IResult,
+};
+use serde_derive::{Deserialize, Serialize};
 
 /// Network data processing statistics
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -188,7 +182,7 @@ where
     R: io::Read,
 {
     let mut buf = vec![];
-    try!(handle.read_to_end(&mut buf));
+    handle.read_to_end(&mut buf)?;
 
     Ok(buf)
 }
@@ -232,7 +226,6 @@ fn json(stats: &Vec<SoftnetStat>) {
 
 fn prometheus(stats: &Vec<SoftnetStat>) {
     for (i, stat) in stats.iter().enumerate() {
-
         // Prior to Linux kernel v5.10, we used the index to determine the CPU Id. However, this is
         // not always correct as offline CPUs are not reported in the softnet data. If we are on a
         // Linux kernel that supports the cpu_id data, then we use that instead.

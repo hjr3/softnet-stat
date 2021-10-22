@@ -6,7 +6,7 @@ Parse the `/proc/net/softnet_stat` file into something more readable. For more i
 
 ## Compatible Systems
 
-This parser should work on all Linux kernels since v2.6.32. In later versions of the kernel, more fields were added. Currently, the parser will default these fields to a value of `0` if they are not found in the file.
+This parser should work on all Linux kernels since `v2.6.32`. In later versions of the kernel, more fields were added. Currently, the parser will default these fields to a value of `0` if they are not found in the file.
 
 ## Distribution
 
@@ -14,7 +14,9 @@ The `softnet-stat` binary is distributed via the [hjr3/softnet-stat](https://pac
 
 ## Build
 
-This software was written in Rust using v1.10.0. All dependencies are listed in `Cargo.toml`. To build: `$ cargo build`.
+This software was built Rust using `v1.56.0`. All dependencies are listed in `Cargo.toml`. To build: `$ cargo build`.
+
+The `v1.x.x` releases were built using Rust `v1.10.0`.
 
 ### Static Binary
 

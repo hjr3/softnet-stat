@@ -1,6 +1,8 @@
 [package]
 name = "softnet-stat"
-version = "1.0.0"
+version = "2.0.0"
+edition = "2021"
+rust_vesrion = "1.56"
 authors = ["Herman J. Radtke III <herman@hermanradtke.com>"]
 description = "Parse the `/proc/net/softnet_stat` file into something more readable."
 documentation = "https://github.com/hjr3/softnet-stat"
@@ -11,8 +13,8 @@ keywords = ["network", "monitor", "softnet"]
 license = "GPL-3.0"
 
 [dependencies]
-nom = "4.0.0-beta2"
-getopts = "0.2.14"
-serde = "1.0"
-serde_derive = "1.0"
-serde_json = "1.0"
+nom = "^4.2.3"
+getopts = "^0.2.14"
+serde = "^1.0.0"
+serde_derive = "^1.0.0"
+serde_json = "^1.0.0"
