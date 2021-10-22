@@ -63,6 +63,9 @@ struct SoftnetStat {
     /// Flow limiting is an optional Receive Packet Steering feature.
     /// Support was added in kernel v3.11
     pub flow_limit_count: Option<u32>,
+
+    pub backlog_len: Option<u32>,
+    pub index: Option<u32>,
 }
 
 fn parse_softnet_stats(input: &[u8]) -> IResult<&[u8], Vec<SoftnetStat>> {
@@ -97,6 +100,8 @@ fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
             >> cpu_collision: hex_u32
             >> received_rps: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
             >> flow_limit_count: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
+            >> backlog_len: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
+            >> index: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
             >> line_ending
             >> (SoftnetStat {
                 processed: processed,
@@ -105,6 +110,8 @@ fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
                 cpu_collision: cpu_collision,
                 received_rps: received_rps,
                 flow_limit_count: flow_limit_count,
+                backlog_len: backlog_len,
+                index: index,
             })
     )
 }
@@ -175,20 +182,22 @@ where
 
 fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
     println!(
-        "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
+        "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
         "Cpu",
         "Processed",
         "Dropped",
         "Time Squeezed",
         "Cpu Collision",
         "Received RPS",
-        "Flow Limit Count",
+        "Flow Limit Cnt",
+        "Backlog Length",
+        "Index",
         spacer = spacer
     );
 
     for (i, stat) in stats.iter().enumerate() {
         println!(
-            "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
+            "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
             i,
             stat.processed,
             stat.dropped,
@@ -196,6 +205,8 @@ fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
             stat.cpu_collision,
             stat.received_rps.unwrap_or_default(),
             stat.flow_limit_count.unwrap_or_default(),
+            stat.backlog_len.unwrap_or_default(),
+            stat.index.unwrap_or_default(),
             spacer = spacer
         );
     }
@@ -234,6 +245,16 @@ fn prometheus(stats: &Vec<SoftnetStat>) {
             i,
             stat.flow_limit_count.unwrap_or_default()
         );
+        println!(
+            "softnet_backlog_len{{cpu=\"cpu{}\"}} {}",
+            i,
+            stat.backlog_len.unwrap_or_default()
+        );
+        println!(
+            "softnet_index{{cpu=\"cpu{}\"}} {}",
+            i,
+            stat.index.unwrap_or_default()
+        );
     }
 }
 
@@ -252,6 +273,8 @@ fn test_parse_softnet_line() {
             cpu_collision: 0,
             received_rps: None,
             flow_limit_count: None,
+            backlog_len: None,
+            index: None,
         },
         value
     );
@@ -264,6 +287,7 @@ fn test_parse_softnet_stats() {
         format!("{}/tests/proc-net-softnet_stat-2_6_32", pwd),
         format!("{}/tests/proc-net-softnet_stat-2_6_36", pwd),
         format!("{}/tests/proc-net-softnet_stat-3_11", pwd),
+        format!("{}/tests/proc-net-softnet_stat-5_10_47", pwd),
     ];
 
     for file in files.iter() {
