@@ -23,10 +23,10 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
-use nom::{IResult, Err, AsBytes, Context, ErrorKind, space, hex_u32, line_ending};
+use nom::{hex_u32, line_ending, space, AsBytes, Context, Err, ErrorKind, IResult};
 
-use std::io;
 use std::fs::File;
+use std::io;
 
 use getopts::Options;
 use std::env;
@@ -63,6 +63,9 @@ struct SoftnetStat {
     /// Flow limiting is an optional Receive Packet Steering feature.
     /// Support was added in kernel v3.11
     pub flow_limit_count: Option<u32>,
+
+    pub backlog_len: Option<u32>,
+    pub index: Option<u32>,
 }
 
 fn parse_softnet_stats(input: &[u8]) -> IResult<&[u8], Vec<SoftnetStat>> {
@@ -70,7 +73,6 @@ fn parse_softnet_stats(input: &[u8]) -> IResult<&[u8], Vec<SoftnetStat>> {
 }
 
 fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
-
     // do_parse! returns Err::Incomplete on zero length input, which causes problems with other
     // sequence combinators. Return an end of file error instead.
     if input.as_bytes().len() == 0 {
@@ -79,49 +81,38 @@ fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
 
     do_parse!(
         input,
-        processed: hex_u32 >>
-        space >>
-        dropped: hex_u32 >>
-        space >>
-        time_squeeze: hex_u32 >>
-        space >>
-        hex_u32 >>
-        space >>
-        hex_u32 >>
-        space >>
-        hex_u32 >>
-        space >>
-        hex_u32 >>
-        space >>
-        hex_u32 >>
-        space >>
-        cpu_collision: hex_u32 >>
-        received_rps: opt!(
-            do_parse!(
-                opt!(space) >>
-                v: hex_u32 >>
-
-                (v)
-            )
-        ) >>
-        flow_limit_count: opt!(
-            do_parse!(
-                opt!(space) >>
-                v: hex_u32 >>
-
-                (v)
-            )
-        ) >>
-        line_ending >>
-
-        (SoftnetStat {
-            processed: processed,
-            dropped: dropped,
-            time_squeeze: time_squeeze,
-            cpu_collision: cpu_collision,
-            received_rps: received_rps,
-            flow_limit_count: flow_limit_count,
-        })
+        processed: hex_u32
+            >> space
+            >> dropped: hex_u32
+            >> space
+            >> time_squeeze: hex_u32
+            >> space
+            >> hex_u32
+            >> space
+            >> hex_u32
+            >> space
+            >> hex_u32
+            >> space
+            >> hex_u32
+            >> space
+            >> hex_u32
+            >> space
+            >> cpu_collision: hex_u32
+            >> received_rps: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
+            >> flow_limit_count: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
+            >> backlog_len: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
+            >> index: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
+            >> line_ending
+            >> (SoftnetStat {
+                processed: processed,
+                dropped: dropped,
+                time_squeeze: time_squeeze,
+                cpu_collision: cpu_collision,
+                received_rps: received_rps,
+                flow_limit_count: flow_limit_count,
+                backlog_len: backlog_len,
+                index: index,
+            })
     )
 }
 
@@ -157,8 +148,12 @@ fn main() {
 
     let stats = match parse_softnet_stats(&raw) {
         Ok((_, value)) => value,
-        Err(Err::Incomplete(needed)) => panic!("{} is in an unsupported format. Needed: {:?}", file, needed),
-        Err(Err::Error(e)) | Err(Err::Failure(e)) => panic!("Error while parsing {}: {:?}", file, e),
+        Err(Err::Incomplete(needed)) => {
+            panic!("{} is in an unsupported format. Needed: {:?}", file, needed)
+        }
+        Err(Err::Error(e)) | Err(Err::Failure(e)) => {
+            panic!("Error while parsing {}: {:?}", file, e)
+        }
     };
 
     if matches.opt_present("j") {
@@ -175,7 +170,10 @@ fn print_usage(program: &str, opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
-fn read_proc_file<R>(mut handle: R) -> io::Result<Vec<u8>> where R: io::Read {
+fn read_proc_file<R>(mut handle: R) -> io::Result<Vec<u8>>
+where
+    R: io::Read,
+{
     let mut buf = vec![];
     try!(handle.read_to_end(&mut buf));
 
@@ -183,26 +181,34 @@ fn read_proc_file<R>(mut handle: R) -> io::Result<Vec<u8>> where R: io::Read {
 }
 
 fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
-    println!("{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
-             "Cpu",
-             "Processed",
-             "Dropped",
-             "Time Squeezed",
-             "Cpu Collision",
-             "Received RPS",
-             "Flow Limit Count",
-             spacer = spacer);
+    println!(
+        "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
+        "Cpu",
+        "Processed",
+        "Dropped",
+        "Time Squeezed",
+        "Cpu Collision",
+        "Received RPS",
+        "Flow Limit Cnt",
+        "Backlog Length",
+        "Index",
+        spacer = spacer
+    );
 
     for (i, stat) in stats.iter().enumerate() {
-        println!("{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
-                 i,
-                 stat.processed,
-                 stat.dropped,
-                 stat.time_squeeze,
-                 stat.cpu_collision,
-                 stat.received_rps.unwrap_or_default(),
-                 stat.flow_limit_count.unwrap_or_default(),
-                 spacer = spacer);
+        println!(
+            "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
+            i,
+            stat.processed,
+            stat.dropped,
+            stat.time_squeeze,
+            stat.cpu_collision,
+            stat.received_rps.unwrap_or_default(),
+            stat.flow_limit_count.unwrap_or_default(),
+            stat.backlog_len.unwrap_or_default(),
+            stat.index.unwrap_or_default(),
+            spacer = spacer
+        );
     }
 }
 
@@ -213,12 +219,42 @@ fn json(stats: &Vec<SoftnetStat>) {
 
 fn prometheus(stats: &Vec<SoftnetStat>) {
     for (i, stat) in stats.iter().enumerate() {
-        println!("softnet_frames_processed{{cpu=\"cpu{}\"}} {}", i, stat.processed);
-        println!("softnet_frames_dropped{{cpu=\"cpu{}\"}} {}", i, stat.dropped);
-        println!("softnet_time_squeeze{{cpu=\"cpu{}\"}} {}", i, stat.time_squeeze);
-        println!("softnet_cpu_collisions{{cpu=\"cpu{}\"}} {}", i, stat.cpu_collision);
-        println!("softnet_received_rps{{cpu=\"cpu{}\"}} {}", i, stat.received_rps.unwrap_or_default());
-        println!("softnet_flow_limit_count{{cpu=\"cpu{}\"}} {}", i, stat.flow_limit_count.unwrap_or_default());
+        println!(
+            "softnet_frames_processed{{cpu=\"cpu{}\"}} {}",
+            i, stat.processed
+        );
+        println!(
+            "softnet_frames_dropped{{cpu=\"cpu{}\"}} {}",
+            i, stat.dropped
+        );
+        println!(
+            "softnet_time_squeeze{{cpu=\"cpu{}\"}} {}",
+            i, stat.time_squeeze
+        );
+        println!(
+            "softnet_cpu_collisions{{cpu=\"cpu{}\"}} {}",
+            i, stat.cpu_collision
+        );
+        println!(
+            "softnet_received_rps{{cpu=\"cpu{}\"}} {}",
+            i,
+            stat.received_rps.unwrap_or_default()
+        );
+        println!(
+            "softnet_flow_limit_count{{cpu=\"cpu{}\"}} {}",
+            i,
+            stat.flow_limit_count.unwrap_or_default()
+        );
+        println!(
+            "softnet_backlog_len{{cpu=\"cpu{}\"}} {}",
+            i,
+            stat.backlog_len.unwrap_or_default()
+        );
+        println!(
+            "softnet_index{{cpu=\"cpu{}\"}} {}",
+            i,
+            stat.index.unwrap_or_default()
+        );
     }
 }
 
@@ -229,14 +265,19 @@ fn test_parse_softnet_line() {
     let (remaining, value) = parse_softnet_line(&raw[..]).unwrap();
 
     assert_eq!(0, remaining.as_bytes().len());
-    assert_eq!(SoftnetStat {
-        processed: 1842008611,
-        dropped: 0,
-        time_squeeze: 1,
-        cpu_collision: 0,
-        received_rps: None,
-        flow_limit_count: None,
-    }, value);
+    assert_eq!(
+        SoftnetStat {
+            processed: 1842008611,
+            dropped: 0,
+            time_squeeze: 1,
+            cpu_collision: 0,
+            received_rps: None,
+            flow_limit_count: None,
+            backlog_len: None,
+            index: None,
+        },
+        value
+    );
 }
 
 #[test]
@@ -246,6 +287,7 @@ fn test_parse_softnet_stats() {
         format!("{}/tests/proc-net-softnet_stat-2_6_32", pwd),
         format!("{}/tests/proc-net-softnet_stat-2_6_36", pwd),
         format!("{}/tests/proc-net-softnet_stat-3_11", pwd),
+        format!("{}/tests/proc-net-softnet_stat-5_10_47", pwd),
     ];
 
     for file in files.iter() {

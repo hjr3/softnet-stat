@@ -6,7 +6,7 @@ Parse the `/proc/net/softnet_stat` file into something more readable. For more i
 
 ## Compatible Systems
 
-This parser should work on all Linux kernels since v2.6.32. In later versions of the kernel, more fields were added. Currenty, the parser will default these fields to a value of `0` if they are not found in the file.
+This parser should work on all Linux kernels since v2.6.32. In later versions of the kernel, more fields were added. Currently, the parser will default these fields to a value of `0` if they are not found in the file.
 
 ## Distribution
 
@@ -34,7 +34,14 @@ docker run --rm -it -v "$(pwd)":/home/rust/src ekidd/rust-musl-builder cargo bui
 
 ## Tests
 
-This program has been tested against 3 versions of the `/proc/net/softnet_stat` file. To excercise these tests: `$ cargo test`.
+This program has been tested against `/proc/net/softnet_stat` files from these Linux versions:
+
+* `v2.6.32`
+* `v2.6.36`
+* `v3.11.x`
+* `v5.10.47`
+
+To exercise these tests: `$ cargo test`.
 
 ## Examples
 
