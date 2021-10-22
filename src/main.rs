@@ -188,7 +188,7 @@ where
     R: io::Read,
 {
     let mut buf = vec![];
-    try!(handle.read_to_end(&mut buf));
+    handle.read_to_end(&mut buf)?;
 
     Ok(buf)
 }
@@ -232,7 +232,6 @@ fn json(stats: &Vec<SoftnetStat>) {
 
 fn prometheus(stats: &Vec<SoftnetStat>) {
     for (i, stat) in stats.iter().enumerate() {
-
         // Prior to Linux kernel v5.10, we used the index to determine the CPU Id. However, this is
         // not always correct as offline CPUs are not reported in the softnet data. If we are on a
         // Linux kernel that supports the cpu_id data, then we use that instead.
