@@ -21,8 +21,7 @@ use std::io;
 
 use getopts::Options;
 use nom::{
-    call, do_parse, error_position, hex_u32, line_ending, many1, opt, space, AsBytes, Context, Err,
-    ErrorKind, IResult,
+    do_parse, hex_u32, line_ending, many1, opt, space, AsBytes, Context, Err, ErrorKind, IResult,
 };
 use serde_derive::{Deserialize, Serialize};
 
