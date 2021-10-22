@@ -51,6 +51,8 @@ struct SoftnetStat {
 
     /// The number of times a collision occurred when trying to obtain a device lock
     /// when transmitting packets.
+    ///
+    /// This was removed in kernel v4.7
     pub cpu_collision: u32,
 
     /// The number of times this CPU has been woken up to process packets via an Inter-processor Interrupt.
@@ -61,11 +63,22 @@ struct SoftnetStat {
     /// The number of times the flow limit has been reached.
     ///
     /// Flow limiting is an optional Receive Packet Steering feature.
+    ///
     /// Support was added in kernel v3.11
     pub flow_limit_count: Option<u32>,
 
+    /// The network backlog length.
+    ///
+    /// Support was added in kernel v5.10
     pub backlog_len: Option<u32>,
-    pub index: Option<u32>,
+
+    /// The cpu_id is the CPU id owning this softnet data.
+    ///
+    /// There is not a direct match between softnet_stat
+    /// lines and the related CPU. Offline CPUs are not dumped.
+    ///
+    /// Support was added in kernel v5.10
+    pub cpu_id: Option<u32>,
 }
 
 fn parse_softnet_stats(input: &[u8]) -> IResult<&[u8], Vec<SoftnetStat>> {
@@ -101,7 +114,7 @@ fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
             >> received_rps: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
             >> flow_limit_count: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
             >> backlog_len: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
-            >> index: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
+            >> cpu_id: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
             >> line_ending
             >> (SoftnetStat {
                 processed: processed,
@@ -111,7 +124,7 @@ fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
                 received_rps: received_rps,
                 flow_limit_count: flow_limit_count,
                 backlog_len: backlog_len,
-                index: index,
+                cpu_id: cpu_id,
             })
     )
 }
@@ -191,7 +204,7 @@ fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
         "Received RPS",
         "Flow Limit Cnt",
         "Backlog Length",
-        "Index",
+        "CPU Id",
         spacer = spacer
     );
 
@@ -206,7 +219,7 @@ fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
             stat.received_rps.unwrap_or_default(),
             stat.flow_limit_count.unwrap_or_default(),
             stat.backlog_len.unwrap_or_default(),
-            stat.index.unwrap_or_default(),
+            stat.cpu_id.unwrap_or_default(),
             spacer = spacer
         );
     }
@@ -219,41 +232,42 @@ fn json(stats: &Vec<SoftnetStat>) {
 
 fn prometheus(stats: &Vec<SoftnetStat>) {
     for (i, stat) in stats.iter().enumerate() {
+
+        // Prior to Linux kernel v5.10, we used the index to determine the CPU Id. However, this is
+        // not always correct as offline CPUs are not reported in the softnet data. If we are on a
+        // Linux kernel that supports the cpu_id data, then we use that instead.
+        let cpu_id = stat.cpu_id.unwrap_or(i as u32);
+
         println!(
             "softnet_frames_processed{{cpu=\"cpu{}\"}} {}",
-            i, stat.processed
+            cpu_id, stat.processed
         );
         println!(
             "softnet_frames_dropped{{cpu=\"cpu{}\"}} {}",
-            i, stat.dropped
+            cpu_id, stat.dropped
         );
         println!(
             "softnet_time_squeeze{{cpu=\"cpu{}\"}} {}",
-            i, stat.time_squeeze
+            cpu_id, stat.time_squeeze
         );
         println!(
             "softnet_cpu_collisions{{cpu=\"cpu{}\"}} {}",
-            i, stat.cpu_collision
+            cpu_id, stat.cpu_collision
         );
         println!(
             "softnet_received_rps{{cpu=\"cpu{}\"}} {}",
-            i,
+            cpu_id,
             stat.received_rps.unwrap_or_default()
         );
         println!(
             "softnet_flow_limit_count{{cpu=\"cpu{}\"}} {}",
-            i,
+            cpu_id,
             stat.flow_limit_count.unwrap_or_default()
         );
         println!(
             "softnet_backlog_len{{cpu=\"cpu{}\"}} {}",
-            i,
+            cpu_id,
             stat.backlog_len.unwrap_or_default()
-        );
-        println!(
-            "softnet_index{{cpu=\"cpu{}\"}} {}",
-            i,
-            stat.index.unwrap_or_default()
         );
     }
 }
@@ -274,7 +288,7 @@ fn test_parse_softnet_line() {
             received_rps: None,
             flow_limit_count: None,
             backlog_len: None,
-            index: None,
+            cpu_id: None,
         },
         value
     );
