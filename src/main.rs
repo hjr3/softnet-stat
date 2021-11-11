@@ -143,7 +143,7 @@ fn parse_softnet_stats(input: &[u8]) -> IResult<&[u8], Vec<SoftnetStat>> {
 }
 
 fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
-    if input.as_bytes().len() == 0 {
+    if input.as_bytes().is_empty() {
         return Err(Err::Error(Error::new(input, ErrorKind::Eof)));
     }
 
@@ -187,7 +187,7 @@ fn print_usage(program: &str, opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
-fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
+fn print(stats: &[SoftnetStat], spacer: usize) {
     println!(
         "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
         "Cpu",
@@ -219,12 +219,12 @@ fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
     }
 }
 
-fn json(stats: &Vec<SoftnetStat>) {
+fn json(stats: &[SoftnetStat]) {
     let data = serde_json::to_string(&stats).expect("Failed to encode stats into json format");
     println!("{}", data);
 }
 
-fn prometheus(stats: &Vec<SoftnetStat>) {
+fn prometheus(stats: &[SoftnetStat]) {
     for (i, stat) in stats.iter().enumerate() {
         // Prior to Linux kernel v5.10, we used the index to determine the CPU Id. However, this is
         // not always correct as offline CPUs are not reported in the softnet data. If we are on a
