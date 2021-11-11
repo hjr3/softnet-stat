@@ -13,7 +13,7 @@ keywords = ["network", "monitor", "softnet"]
 license = "GPL-3.0"
 
 [dependencies]
-nom = "^4.2.3"
+nom = "^7.1.0"
 getopts = "^0.2.14"
 serde = "^1.0.0"
 serde_derive = "^1.0.0"

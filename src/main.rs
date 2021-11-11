@@ -20,9 +20,13 @@ use std::fs::File;
 use std::io;
 
 use getopts::Options;
-use nom::{
-    do_parse, hex_u32, line_ending, many1, opt, space, AsBytes, Context, Err, ErrorKind, IResult,
-};
+use nom::character::complete::{char, line_ending};
+use nom::combinator::{map, opt};
+use nom::error::{Error, ErrorKind};
+use nom::multi::many1;
+use nom::number::complete::hex_u32;
+use nom::sequence::{preceded, tuple};
+use nom::{AsBytes, Err, IResult};
 use serde_derive::{Deserialize, Serialize};
 
 /// Network data processing statistics
@@ -75,54 +79,6 @@ struct SoftnetStat {
     pub cpu_id: Option<u32>,
 }
 
-fn parse_softnet_stats(input: &[u8]) -> IResult<&[u8], Vec<SoftnetStat>> {
-    many1!(input, parse_softnet_line)
-}
-
-fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
-    // do_parse! returns Err::Incomplete on zero length input, which causes problems with other
-    // sequence combinators. Return an end of file error instead.
-    if input.as_bytes().len() == 0 {
-        return Err(Err::Error(Context::Code(input, ErrorKind::Eof)));
-    }
-
-    do_parse!(
-        input,
-        processed: hex_u32
-            >> space
-            >> dropped: hex_u32
-            >> space
-            >> time_squeeze: hex_u32
-            >> space
-            >> hex_u32
-            >> space
-            >> hex_u32
-            >> space
-            >> hex_u32
-            >> space
-            >> hex_u32
-            >> space
-            >> hex_u32
-            >> space
-            >> cpu_collision: hex_u32
-            >> received_rps: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
-            >> flow_limit_count: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
-            >> backlog_len: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
-            >> cpu_id: opt!(do_parse!(opt!(space) >> v: hex_u32 >> (v)))
-            >> line_ending
-            >> (SoftnetStat {
-                processed: processed,
-                dropped: dropped,
-                time_squeeze: time_squeeze,
-                cpu_collision: cpu_collision,
-                received_rps: received_rps,
-                flow_limit_count: flow_limit_count,
-                backlog_len: backlog_len,
-                cpu_id: cpu_id,
-            })
-    )
-}
-
 fn main() {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
@@ -172,11 +128,6 @@ fn main() {
     }
 }
 
-fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} [options]", program);
-    print!("{}", opts.usage(&brief));
-}
-
 fn read_proc_file<R>(mut handle: R) -> io::Result<Vec<u8>>
 where
     R: io::Read,
@@ -187,7 +138,56 @@ where
     Ok(buf)
 }
 
-fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
+fn parse_softnet_stats(input: &[u8]) -> IResult<&[u8], Vec<SoftnetStat>> {
+    many1(parse_softnet_line)(input)
+}
+
+fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
+    if input.as_bytes().is_empty() {
+        return Err(Err::Error(Error::new(input, ErrorKind::Eof)));
+    }
+
+    let line = tuple((
+        hex_u32,                  // processed
+        preceded(space, hex_u32), // dropped
+        preceded(space, hex_u32), // time_squeeze
+        preceded(space, hex_u32),
+        preceded(space, hex_u32),
+        preceded(space, hex_u32),
+        preceded(space, hex_u32),
+        preceded(space, hex_u32),
+        preceded(space, hex_u32),      // cpu collision
+        opt(preceded(space, hex_u32)), // received_rps
+        opt(preceded(space, hex_u32)), // flow_limit_count
+        opt(preceded(space, hex_u32)), // backlog_len
+        opt(preceded(space, hex_u32)), // cpu_id
+        line_ending,
+    ));
+
+    let mut parser = map(line, |result| SoftnetStat {
+        processed: result.0,
+        dropped: result.1,
+        time_squeeze: result.2,
+        cpu_collision: result.8,
+        received_rps: result.9,
+        flow_limit_count: result.10,
+        backlog_len: result.11,
+        cpu_id: result.12,
+    });
+
+    parser(input)
+}
+
+fn space(input: &[u8]) -> IResult<&[u8], char> {
+    char(' ')(input)
+}
+
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!("Usage: {} [options]", program);
+    print!("{}", opts.usage(&brief));
+}
+
+fn print(stats: &[SoftnetStat], spacer: usize) {
     println!(
         "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
         "Cpu",
@@ -219,12 +219,12 @@ fn print(stats: &Vec<SoftnetStat>, spacer: usize) {
     }
 }
 
-fn json(stats: &Vec<SoftnetStat>) {
+fn json(stats: &[SoftnetStat]) {
     let data = serde_json::to_string(&stats).expect("Failed to encode stats into json format");
     println!("{}", data);
 }
 
-fn prometheus(stats: &Vec<SoftnetStat>) {
+fn prometheus(stats: &[SoftnetStat]) {
     for (i, stat) in stats.iter().enumerate() {
         // Prior to Linux kernel v5.10, we used the index to determine the CPU Id. However, this is
         // not always correct as offline CPUs are not reported in the softnet data. If we are on a
@@ -263,6 +263,16 @@ fn prometheus(stats: &Vec<SoftnetStat>) {
             stat.backlog_len.unwrap_or_default()
         );
     }
+}
+
+#[test]
+fn test_parse_softnet_empty_line() {
+    let raw = b"";
+
+    // FIXME
+    // Err(Err::Error((&raw[..] ErrorKind::Eof)))) should work, but there is some type inference
+    // issue going on
+    assert_eq!(parse_softnet_line(&raw[..]).is_err(), true,);
 }
 
 #[test]
