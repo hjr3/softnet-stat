@@ -1,6 +1,6 @@
 # softnet-stat
 
-[![Build Status](https://travis-ci.org/hjr3/softnet-stat.svg?branch=master)](https://travis-ci.org/hjr3/softnet-stat)
+[![Build Status](https://github.com/hjr3/softnet-stat/actions/workflows/ci.yml/badge.svg)
 
 Parse the `/proc/net/softnet_stat` file into something more readable. For more information about `/proc/net/softnet_stat`, I suggest reading [Monitoring and Tuning the Linux Networking Stack: Receiving Data](http://blog.packagecloud.io/eng/2016/06/22/monitoring-tuning-linux-networking-stack-receiving-data/#help-with-linux-networking-or-other-systems).
 
