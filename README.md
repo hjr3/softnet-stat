@@ -34,6 +34,17 @@ For macOS:
 docker run --rm -it -v "$(pwd)":/home/rust/src ekidd/rust-musl-builder cargo build --release
 ```
 
+## Release
+
+To create a new rpm, do the following:
+
+```
+$ mkdir target/x86_64-unknown-linux-musl/release/$VERSION
+$ docker run --rm -v $(pwd):/data skandyla/fpm -s dir -t rpm -n "softnet_stat" -v $VERSION -p /data -C /data/target/x86_64-unknown-linux-musl/release ./
+```
+
+This will put something like `softnet_stat-1.2.0-1.x86_64.rpm` in the current directory.
+
 ## Tests
 
 This program has been tested against `/proc/net/softnet_stat` files from these Linux versions:
