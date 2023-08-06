@@ -53,6 +53,7 @@ This program has been tested against `/proc/net/softnet_stat` files from these L
 * `v2.6.36`
 * `v3.11.x`
 * `v5.10.47`
+* `v6.4.x`
 
 To exercise these tests: `$ cargo test`.
 
