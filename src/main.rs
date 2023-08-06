@@ -77,6 +77,16 @@ struct SoftnetStat {
     ///
     /// Support was added in kernel v5.10
     pub cpu_id: Option<u32>,
+
+    /// Input backlog queue length 
+    ///
+    /// Support was added in kernel v6.4
+    pub input_qlen: Option<u32>,
+    
+    /// Process backlog queue length
+    ///
+    /// Support was added in kernel v6.4
+    pub process_qlen: Option<u32>
 }
 
 fn main() {
@@ -159,8 +169,10 @@ fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
         preceded(space, hex_u32),      // cpu collision
         opt(preceded(space, hex_u32)), // received_rps
         opt(preceded(space, hex_u32)), // flow_limit_count
-        opt(preceded(space, hex_u32)), // backlog_len
+        opt(preceded(space, hex_u32)), // backlog_len (input_qlen + process_qlen)
         opt(preceded(space, hex_u32)), // cpu_id
+        opt(preceded(space, hex_u32)), // input_qlen
+        opt(preceded(space, hex_u32)), // process_qlen
         line_ending,
     ));
 
@@ -173,6 +185,8 @@ fn parse_softnet_line(input: &[u8]) -> IResult<&[u8], SoftnetStat> {
         flow_limit_count: result.10,
         backlog_len: result.11,
         cpu_id: result.12,
+        input_qlen: result.13,
+        process_qlen: result.14
     });
 
     parser(input)
@@ -189,7 +203,7 @@ fn print_usage(program: &str, opts: Options) {
 
 fn print(stats: &[SoftnetStat], spacer: usize) {
     println!(
-        "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
+        "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
         "Cpu",
         "Processed",
         "Dropped",
@@ -199,12 +213,14 @@ fn print(stats: &[SoftnetStat], spacer: usize) {
         "Flow Limit Cnt",
         "Backlog Length",
         "CPU Id",
+        "Input Length",
+        "Process Length",
         spacer = spacer
     );
 
     for (i, stat) in stats.iter().enumerate() {
         println!(
-            "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
+            "{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}{:<spacer$}",
             i,
             stat.processed,
             stat.dropped,
@@ -214,6 +230,8 @@ fn print(stats: &[SoftnetStat], spacer: usize) {
             stat.flow_limit_count.unwrap_or_default(),
             stat.backlog_len.unwrap_or_default(),
             stat.cpu_id.unwrap_or_default(),
+            stat.input_qlen.unwrap_or_default(),
+            stat.process_qlen.unwrap_or_default(),
             spacer = spacer
         );
     }
@@ -292,6 +310,8 @@ fn test_parse_softnet_line() {
             flow_limit_count: None,
             backlog_len: None,
             cpu_id: None,
+            input_qlen: None,
+            process_qlen: None
         },
         value
     );
@@ -305,6 +325,7 @@ fn test_parse_softnet_stats() {
         format!("{}/tests/proc-net-softnet_stat-2_6_36", pwd),
         format!("{}/tests/proc-net-softnet_stat-3_11", pwd),
         format!("{}/tests/proc-net-softnet_stat-5_10_47", pwd),
+        format!("{}/tests/proc-net-softnet_stat-6_4_7", pwd),
     ];
 
     for file in files.iter() {
